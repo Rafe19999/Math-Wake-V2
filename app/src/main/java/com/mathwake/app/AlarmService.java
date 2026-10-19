@@ -27,9 +27,18 @@ public class AlarmService extends Service implements SensorEventListener {
    PendingIntent pi=PendingIntent.getActivity(this,200,screen,PendingIntent.FLAG_UPDATE_CURRENT|PendingIntent.FLAG_IMMUTABLE);
    Notification n=new Notification.Builder(this,CHANNEL).setSmallIcon(android.R.drawable.ic_lock_idle_alarm).setContentTitle("MathWake alarm ringing").setContentText(walking?"Walk 40 steps to dismiss":"Solve 3 maths problems to dismiss").setCategory(Notification.CATEGORY_ALARM).setOngoing(true).setContentIntent(pi).setFullScreenIntent(pi,true).build();
    if(Build.VERSION.SDK_INT>=29)startForeground(200,n,ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK);else startForeground(200,n);
-   try{Uri uri=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);if(uri==null)uri=RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
-      player=new MediaPlayer();player.setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());player.setDataSource(this,uri);player.setLooping(true);player.prepare();player.start();}
-   catch(Exception e){Log.e("MathWake","Cannot play alarm sound",e);}
+   String chosen = AlarmScheduler.prefs(this).getString("ringtone_uri", "");
+   Uri custom = chosen.isEmpty() ? null : Uri.parse(chosen);
+   boolean started = false;
+   if (custom != null) {
+      started = startAlarmAudio(custom);
+      if (!started) Log.w("MathWake", "Selected audio unavailable, using default alarm");
+   }
+   if (!started) {
+      Uri standard = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM);
+      if (standard == null) standard = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION);
+      startAlarmAudio(standard);
+   }
    if(walking){
       steps=0;AlarmScheduler.prefs(this).edit().putInt("steps",0).apply();
       PowerManager pm=(PowerManager)getSystemService(POWER_SERVICE);
@@ -46,6 +55,25 @@ public class AlarmService extends Service implements SensorEventListener {
           }catch(SecurityException e){Log.e("MathWake","Physical Activity permission missing",e);}}
       }
    }
+ }
+ private boolean startAlarmAudio(Uri uri) {
+    if (uri == null) return false;
+    MediaPlayer attempt = new MediaPlayer();
+    try {
+       attempt.setAudioAttributes(new AudioAttributes.Builder()
+           .setUsage(AudioAttributes.USAGE_ALARM)
+           .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+       attempt.setDataSource(this, uri);
+       attempt.setLooping(true);
+       attempt.prepare();
+       attempt.start();
+       player = attempt;
+       return true;
+    } catch(Exception e) {
+       Log.e("MathWake", "Could not play alarm audio: " + uri, e);
+       attempt.release();
+       return false;
+    }
  }
  @Override public void onSensorChanged(SensorEvent event){
    if(walking && stepDetector!=null && event.sensor.getType()==stepDetector.getType()){

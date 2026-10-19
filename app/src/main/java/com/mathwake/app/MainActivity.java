@@ -12,6 +12,9 @@ import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.Settings;
+import android.net.Uri;
+import android.database.Cursor;
+import android.provider.OpenableColumns;
 import android.view.Gravity;
 import android.widget.*;
 
@@ -22,7 +25,8 @@ import java.util.Locale;
 public class MainActivity extends Activity {
     private int hour = 7, minute = 0;
     private String selectedMode = "math";
-    private TextView time, status, info;
+    private TextView time, status, info, ringtoneLabel;
+    private static final int PICK_RINGTONE = 501;
     private LinearLayout root;
 
     private boolean hasStepSensor() {
@@ -104,6 +108,27 @@ public class MainActivity extends Activity {
         info = label(modeCard, "", 13, 0xFF9AA8BC, false, false);
         info.setPadding(0, dp(10), 0, 0);
         updateInfoText();
+
+        LinearLayout ringtoneCard = sectionCard();
+        LinearLayout.LayoutParams ringtoneLp = new LinearLayout.LayoutParams(-1, -2);
+        ringtoneLp.topMargin = dp(16);
+        root.addView(ringtoneCard, ringtoneLp);
+        label(ringtoneCard, "ALARM RINGTONE", 13, 0xFF7BE0C5, false, true);
+        ringtoneLabel = label(ringtoneCard, "", 15, Color.WHITE, false, false);
+        ringtoneLabel.setPadding(0, dp(10), 0, dp(10));
+        Button chooseAudio = actionButton("Choose downloaded audio", 0xFF1C2744);
+        ringtoneCard.addView(chooseAudio, fullWidth());
+        chooseAudio.setOnClickListener(v -> pickAudio());
+        Button useDefault = actionButton("Use default alarm tone", 0xFF2A3658);
+        LinearLayout.LayoutParams defLp = fullWidth();
+        defLp.topMargin = dp(8);
+        ringtoneCard.addView(useDefault, defLp);
+        useDefault.setOnClickListener(v -> {
+            AlarmScheduler.prefs(this).edit().remove("ringtone_uri").remove("ringtone_name").apply();
+            updateRingtoneLabel();
+            toast("Default alarm ringtone selected");
+        });
+        updateRingtoneLabel();
 
         LinearLayout buttonCard = sectionCard();
         LinearLayout.LayoutParams buttonLp = new LinearLayout.LayoutParams(-1, -2);
@@ -249,6 +274,42 @@ public class MainActivity extends Activity {
         } else {
             status.setText("No alarm scheduled yet.");
         }
+    }
+
+    private void updateRingtoneLabel() {
+        if (ringtoneLabel == null) return;
+        String uri = AlarmScheduler.prefs(this).getString("ringtone_uri", "");
+        String name = AlarmScheduler.prefs(this).getString("ringtone_name", "Custom audio");
+        ringtoneLabel.setText(uri.isEmpty() ? "Current: Default alarm sound" : "Current: " + name);
+    }
+
+    private void pickAudio() {
+        Intent pick = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        pick.addCategory(Intent.CATEGORY_OPENABLE);
+        pick.setType("audio/*");
+        pick.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        startActivityForResult(pick, PICK_RINGTONE);
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != PICK_RINGTONE || resultCode != RESULT_OK || data == null || data.getData() == null) return;
+        Uri uri = data.getData();
+        try {
+            getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (SecurityException e) {
+            toast("Cannot keep access to this audio file. Try another file.");
+            return;
+        }
+        String name = "Selected audio";
+        try (Cursor c = getContentResolver().query(uri, new String[]{OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (c != null && c.moveToFirst()) name = c.getString(0);
+        } catch (Exception ignored) {}
+        AlarmScheduler.prefs(this).edit().putString("ringtone_uri", uri.toString())
+                .putString("ringtone_name", name).apply();
+        updateRingtoneLabel();
+        toast("Custom alarm ringtone saved");
     }
 
     private void setAlarm() {
