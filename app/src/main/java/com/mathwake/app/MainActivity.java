@@ -23,7 +23,7 @@ public class MainActivity extends Activity {
     private LinearLayout root;
     private boolean hasStepSensor() {
         SensorManager sm=(SensorManager)getSystemService(SENSOR_SERVICE);
-        return sm!=null && sm.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)!=null;
+        return sm!=null && (sm.getDefaultSensor(Sensor.TYPE_STEP_COUNTER)!=null || sm.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR)!=null);
     }
     private boolean hasActivityPermission(){return Build.VERSION.SDK_INT<29 || checkSelfPermission(Manifest.permission.ACTIVITY_RECOGNITION)==PackageManager.PERMISSION_GRANTED;}
     @Override public void onCreate(Bundle b) {
@@ -42,11 +42,11 @@ public class MainActivity extends Activity {
         RadioButton walk=new RadioButton(this);walk.setText("Walking Challenge  •  walk 40 steps");walk.setTextColor(Color.WHITE);walk.setId(10002);choices.addView(walk);
         ("walk".equals(selectedMode)?walk:math).setChecked(true);
         choices.setOnCheckedChangeListener((group,checked)->selectedMode=checked==10002?"walk":"math");
-        label(hasStepSensor()?"Step detector available on this phone.":"No hardware step detector: Walking mode cannot be used on this phone.",13,0xFFABB6D0).setPadding(0,10,0,22);
+        label(hasStepSensor()?"Walking step sensor available on this phone.":"No step sensor: Walking mode cannot be used on this phone.",13,0xFFABB6D0).setPadding(0,10,0,22);
         button("SET ALARM").setOnClickListener(v->setAlarm());
         button("CANCEL NEXT ALARM").setOnClickListener(v->{AlarmScheduler.cancel(this);refresh();});
         button("PRACTICE MATH").setOnClickListener(v->startActivity(new Intent(this,ChallengeActivity.class).putExtra("demo",true).putExtra("mode","math")));
-        button("PRACTICE WALKING").setOnClickListener(v->{if(!hasStepSensor()){toast("Step detector is not available");return;} if(!hasActivityPermission()){requestWalkPermission();return;}startActivity(new Intent(this,ChallengeActivity.class).putExtra("demo",true).putExtra("mode","walk"));});
+        button("PRACTICE WALKING").setOnClickListener(v->{if(!hasStepSensor()){toast("Step sensor is not available");return;} if(!hasActivityPermission()){requestWalkPermission();return;}startActivity(new Intent(this,ChallengeActivity.class).putExtra("demo",true).putExtra("mode","walk"));});
         status=label("",16,Color.WHITE);status.setPadding(0,28,0,0);refresh();
         label("Walk mode counts physical steps detected by your phone. Keep phone in your pocket. One-time alarm; set a backup alarm for anything important.",13,0xFFABB6D0).setPadding(0,30,0,0);
         if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=PackageManager.PERMISSION_GRANTED)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},20);
@@ -59,7 +59,7 @@ public class MainActivity extends Activity {
     private void refresh(){if(status==null)return;boolean enabled=AlarmScheduler.prefs(this).getBoolean("enabled",false);long next=AlarmScheduler.prefs(this).getLong("next",0);String mode=AlarmScheduler.prefs(this).getString("mode","math");status.setText(enabled?"Alarm set: "+DateFormat.getDateTimeInstance(DateFormat.MEDIUM,DateFormat.SHORT).format(new Date(next))+"\nChallenge: "+("walk".equals(mode)?"40 steps":"3 maths"):"No alarm scheduled");}
     private void setAlarm(){
        if("walk".equals(selectedMode)){
-           if(!hasStepSensor()){toast("Walking mode needs a built-in Step Detector. Choose Math.");return;}
+           if(!hasStepSensor()){toast("Walking mode needs a built-in step sensor. Choose Math.");return;}
            if(!hasActivityPermission()){requestWalkPermission();toast("Grant Physical Activity permission, then press SET ALARM again.");return;}
        }
        try{AlarmScheduler.schedule(this,hour,minute,selectedMode);refresh();toast("Alarm set with "+("walk".equals(selectedMode)?"40 steps":"Math")+" challenge");}

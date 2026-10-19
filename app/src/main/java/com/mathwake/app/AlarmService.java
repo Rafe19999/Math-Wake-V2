@@ -14,6 +14,9 @@ public class AlarmService extends Service implements SensorEventListener {
  private MediaPlayer player;
  private SensorManager sensorManager;
  private Sensor stepDetector;
+ private boolean useCumulativeCounter=false;
+ private float counterBaseline=Float.NaN;
+ private PowerManager.WakeLock wakeLock;
  private int steps=0;
  private boolean walking=false;
  @Override public void onCreate(){super.onCreate();
@@ -29,16 +32,29 @@ public class AlarmService extends Service implements SensorEventListener {
    catch(Exception e){Log.e("MathWake","Cannot play alarm sound",e);}
    if(walking){
       steps=0;AlarmScheduler.prefs(this).edit().putInt("steps",0).apply();
+      PowerManager pm=(PowerManager)getSystemService(POWER_SERVICE);
+      if(pm!=null){wakeLock=pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,"MathWake:walking-alarm");wakeLock.acquire(30*60*1000L);}
       sensorManager=(SensorManager)getSystemService(SENSOR_SERVICE);
-      if(sensorManager!=null){stepDetector=sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
-          if(stepDetector!=null){try{sensorManager.registerListener(this,stepDetector,SensorManager.SENSOR_DELAY_NORMAL);}catch(SecurityException e){Log.e("MathWake","Activity recognition permission missing",e);}}
+      if(sensorManager!=null){
+          Sensor counter=sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
+          Sensor detector=sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
+          stepDetector=counter!=null?counter:detector;
+          useCumulativeCounter=counter!=null;
+          if(stepDetector!=null){try{
+             boolean ok=sensorManager.registerListener(this,stepDetector,SensorManager.SENSOR_DELAY_FASTEST,0);
+             if(!ok) Log.e("MathWake","Sensor listener registration failed");
+          }catch(SecurityException e){Log.e("MathWake","Physical Activity permission missing",e);}}
       }
    }
  }
  @Override public void onSensorChanged(SensorEvent event){
-   if(walking && event.sensor.getType()==Sensor.TYPE_STEP_DETECTOR){
-      // TYPE_STEP_DETECTOR events represent individual detected steps.
-      steps++;
+   if(walking && stepDetector!=null && event.sensor.getType()==stepDetector.getType()){
+      if(useCumulativeCounter){
+          float total=event.values[0];
+          if(Float.isNaN(counterBaseline)){counterBaseline=total;return;}
+          if(total<counterBaseline){counterBaseline=total;return;}
+          steps=Math.max(steps,(int)(total-counterBaseline));
+      }else steps++;
       AlarmScheduler.prefs(this).edit().putInt("steps",steps).apply();
       Intent update=new Intent(ACTION_PROGRESS).setPackage(getPackageName()).putExtra("steps",steps);sendBroadcast(update);
       if(steps>=40)stopSelf();
@@ -49,6 +65,6 @@ public class AlarmService extends Service implements SensorEventListener {
     if(intent!=null && "STOP_AFTER_MATH".equals(intent.getAction()) && !walking){stopSelf();return START_NOT_STICKY;}
     return START_NOT_STICKY;
  }
- @Override public void onDestroy(){if(sensorManager!=null)sensorManager.unregisterListener(this);if(player!=null){try{player.stop();}catch(Exception ignored){}player.release();player=null;}super.onDestroy();}
+ @Override public void onDestroy(){if(sensorManager!=null)sensorManager.unregisterListener(this);if(wakeLock!=null && wakeLock.isHeld())wakeLock.release();if(player!=null){try{player.stop();}catch(Exception ignored){}player.release();player=null;}super.onDestroy();}
  @Override public IBinder onBind(Intent i){return null;}
 }

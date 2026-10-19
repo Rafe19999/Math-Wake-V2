@@ -13,6 +13,8 @@ public class ChallengeActivity extends Activity implements SensorEventListener {
  private final Random random=new Random();
  private boolean demo,walking;
  private int solved=0,answer,demoSteps=0;
+ private float demoCounterBaseline=Float.NaN;
+ private boolean demoUsesCounter=false;
  private TextView progress,question,feedback;
  private EditText input;
  private SensorManager sensorManager;
@@ -28,7 +30,7 @@ public class ChallengeActivity extends Activity implements SensorEventListener {
     if(walking){
       question.setText("Walk 40 real steps with your phone in your pocket.\nThe alarm stops automatically!");
       feedback=text(root,"Keep moving...",17,0xFFFFC86A);
-      if(demo){sensorManager=(SensorManager)getSystemService(SENSOR_SERVICE);if(sensorManager!=null)sensor=sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);}
+      if(demo){sensorManager=(SensorManager)getSystemService(SENSOR_SERVICE);if(sensorManager!=null){sensor=sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);demoUsesCounter=sensor!=null;if(sensor==null)sensor=sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);}}
       updateWalking(demo?0:AlarmScheduler.prefs(this).getInt("steps",0));
     } else {
       input=new EditText(this);input.setSingleLine(true);input.setTextColor(Color.WHITE);input.setHintTextColor(0xFF9CA3AF);input.setHint("Your answer");input.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_SIGNED);root.addView(input,new LinearLayout.LayoutParams(-1,-2));
@@ -48,14 +50,18 @@ public class ChallengeActivity extends Activity implements SensorEventListener {
  private void check(){try{int response=Integer.parseInt(input.getText().toString().trim());if(response==answer){solved++;if(solved==3){if(!demo){Intent stop=new Intent(this,AlarmService.class).setAction("STOP_AFTER_MATH");startService(stop);}finish();}else newProblem();}else{feedback.setText("Not quite. Try again!");input.selectAll();}}catch(NumberFormatException e){feedback.setText("Enter a whole number.");}}
  private void updateWalking(int count){progress.setText("STEPS: "+Math.min(count,40)+" / 40");if(count>=40){feedback.setText("Challenge complete!");finish();}}
  @Override protected void onStart(){super.onStart();if(!walking)return;
-    if(demo){if(sensor!=null)try{sensorManager.registerListener(this,sensor,SensorManager.SENSOR_DELAY_NORMAL);}catch(SecurityException e){feedback.setText("Physical Activity permission needed.");}}
+    if(demo){if(sensor!=null)try{sensorManager.registerListener(this,sensor,SensorManager.SENSOR_DELAY_FASTEST,0);}catch(SecurityException e){feedback.setText("Physical Activity permission needed.");}}
     else {progressReceiver=new BroadcastReceiver(){@Override public void onReceive(Context ctx,Intent event){updateWalking(event.getIntExtra("steps",0));}};
       IntentFilter filter=new IntentFilter(AlarmService.ACTION_PROGRESS);
       if(Build.VERSION.SDK_INT>=33)registerReceiver(progressReceiver,filter,Context.RECEIVER_NOT_EXPORTED);else registerReceiver(progressReceiver,filter);
       updateWalking(AlarmScheduler.prefs(this).getInt("steps",0));}
  }
  @Override protected void onStop(){if(demo && sensorManager!=null)sensorManager.unregisterListener(this);if(progressReceiver!=null){unregisterReceiver(progressReceiver);progressReceiver=null;}super.onStop();}
- @Override public void onSensorChanged(SensorEvent event){if(demo && walking && event.sensor.getType()==Sensor.TYPE_STEP_DETECTOR){demoSteps++;updateWalking(demoSteps);}}
+ @Override public void onSensorChanged(SensorEvent event){if(demo && walking && sensor!=null && event.sensor.getType()==sensor.getType()){
+    if(demoUsesCounter){float total=event.values[0];if(Float.isNaN(demoCounterBaseline)){demoCounterBaseline=total;return;}if(total<demoCounterBaseline){demoCounterBaseline=total;return;}demoSteps=Math.max(demoSteps,(int)(total-demoCounterBaseline));}
+    else demoSteps++;
+    updateWalking(demoSteps);
+ }}
  @Override public void onAccuracyChanged(Sensor sensor,int accuracy){}
  @Override public void onBackPressed(){if(demo)super.onBackPressed();else feedback.setText(walking?"Walk 40 steps to dismiss the alarm.":"Solve 3 maths questions to dismiss the alarm.");}
 }
