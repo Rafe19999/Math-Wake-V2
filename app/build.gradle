@@ -1,4 +1,13 @@
 plugins { id 'com.android.application' }
-android { namespace 'com.mathwake.app'; compileSdk 35
-    defaultConfig { applicationId 'com.mathwake.app'; minSdk 26; targetSdk 35; versionCode 3; versionName '1.2' }
+android {
+    namespace 'com.mathwake.app'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.mathwake.app'
+        minSdk 26
+        targetSdk 35
+        versionCode 4
+        versionName '1.3'
+    }
 }

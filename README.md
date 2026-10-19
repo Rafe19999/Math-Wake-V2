@@ -1,12 +1,16 @@
-# MathWake v1.2 — Math or Walk to Dismiss
+# MathWake V1.3
 
-Native Android alarm app. When setting an alarm choose **Math (3 answers)** or **Walking (40 detected steps)**.
+MathWake is an Android alarm app that can be dismissed by either:
+- solving 3 math questions, or
+- walking 40 verified steps.
 
-## Build without Android Studio
-Upload files AND the hidden `.github/workflows/build-apk.yml` to the root of your existing GitHub repository, replacing matching files. On GitHub Actions open the latest successful run > Artifacts > MathWake-APK.
+## What's new in V1.3
+- Improved walking reliability using BOTH Step Detector (instant updates) and Step Counter (delayed catch-up)
+- Reconciliation logic to reduce missed steps and delayed jumps
+- Basic noise filtering for impossibly fast repeated step events
+- Improved dark UI
+- Added app logo and launcher icon
+- Included GitHub Actions workflow for cloud APK builds
 
-## Walking mode
-Prefers `Sensor.TYPE_STEP_COUNTER` and falls back to `Sensor.TYPE_STEP_DETECTOR` on a real phone and Physical Activity (ACTIVITY_RECOGNITION) permission on Android 10+. AlarmService holds the step listener during the ringing foreground service. Challenge UI updates live. 40 measured steps stop the alarm. Counter-mode starts from the first sensor reading and counts the difference; if the sensor batches readings, the display can update in bursts. A partial wake lock is held while the alarm is sounding (max 30 minutes). It does not use GPS or count shaking deliberately. No hardware detector => only Math Mode is supported. Some manufacturers restrict sensor events while the screen is off; test before relying on it. Phone must be carried on your body.
-
-## Limitations
-One-time alarm only. Alarm behavior on some devices depends on notifications, full-screen intent and background/battery permissions. Android can force stop apps; disabling app/force stop or phone powered off prevents alarm. Always use a backup alarm for important events. Full-screen/alarm sound behavior and physical steps must be verified on real hardware before relying on it.
+## Cloud build
+Upload the full project, including the `.github` folder, to a GitHub repository and use the Actions tab to run the APK build workflow.
