@@ -27,7 +27,8 @@ public class ChallengeActivity extends Activity implements SensorEventListener {
     private TextView progress, question, feedback, badge, subStatus;
     private EditText input;
     private SensorManager sensorManager;
-    private Sensor demoCounterSensor, demoDetectorSensor;
+    private Sensor demoCounterSensor, demoDetectorSensor, demoAccelerometer;
+    private WalkingEngine demoEngine = new WalkingEngine();
     private BroadcastReceiver progressReceiver;
 
     @Override
@@ -65,13 +66,14 @@ public class ChallengeActivity extends Activity implements SensorEventListener {
         subStatus.setPadding(0, 0, 0, dp(12));
 
         if (walking) {
-            question.setText("Walk 40 verified steps.\nPocket mode is recommended.");
+            question.setText("STEPS REMAINING\nWalk naturally with your phone in your pocket.");
             feedback = text(card, "Waiting for steps...", 16, 0xFFFFC86A, false);
             feedback.setPadding(0, dp(6), 0, 0);
 
             if (demo) {
                 sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
                 if (sensorManager != null) {
+                    demoAccelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
                     demoCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
                     demoDetectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
                 }
@@ -228,7 +230,7 @@ public class ChallengeActivity extends Activity implements SensorEventListener {
 
     private void updateWalking(int count, String status) {
         int shown = Math.min(count, 40);
-        progress.setText(String.format(Locale.US, "%d / 40 steps", shown));
+        progress.setText(String.format(Locale.US, "%d", Math.max(0, 40 - shown)));
         subStatus.setText(status == null ? "" : "Sensor status: " + status);
         if (count >= 40) {
             feedback.setText("Challenge complete. Alarm dismissed.");
@@ -236,7 +238,7 @@ public class ChallengeActivity extends Activity implements SensorEventListener {
         } else if (count == 0) {
             feedback.setText("Put the phone in your pocket and walk naturally.");
         } else {
-            feedback.setText((40 - shown) + " steps left");
+            feedback.setText(shown + " steps completed • keep walking");
         }
     }
 
@@ -247,6 +249,7 @@ public class ChallengeActivity extends Activity implements SensorEventListener {
         if (demo) {
             if (sensorManager != null) {
                 try {
+                    if (demoAccelerometer != null) sensorManager.registerListener(this, demoAccelerometer, SensorManager.SENSOR_DELAY_GAME, 0);
                     if (demoCounterSensor != null) sensorManager.registerListener(this, demoCounterSensor, SensorManager.SENSOR_DELAY_UI, 0);
                     if (demoDetectorSensor != null) sensorManager.registerListener(this, demoDetectorSensor, SensorManager.SENSOR_DELAY_FASTEST, 0);
                 } catch (SecurityException e) {
@@ -281,21 +284,8 @@ public class ChallengeActivity extends Activity implements SensorEventListener {
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (!demo || !walking) return;
-        int type = event.sensor.getType();
-        if (type == Sensor.TYPE_STEP_DETECTOR) {
-            long now = SystemClock.elapsedRealtime();
-            if (demoLastAcceptedDetectorStepAt == 0L || now - demoLastAcceptedDetectorStepAt >= STEP_MIN_INTERVAL_MS) {
-                demoDetectorSteps++;
-                demoLastAcceptedDetectorStepAt = now;
-            }
-        } else if (type == Sensor.TYPE_STEP_COUNTER) {
-            float total = event.values[0];
-            if (Float.isNaN(demoCounterBaseline)) demoCounterBaseline = total;
-            else if (total < demoCounterBaseline) demoCounterBaseline = total;
-            else demoCounterSteps = Math.max(demoCounterSteps, (int) (total - demoCounterBaseline));
-        }
-        demoDisplayedSteps = Math.max(demoDetectorSteps, demoCounterSteps);
-        updateWalking(demoDisplayedSteps, "demo detector=" + demoDetectorSteps + " counter=" + demoCounterSteps);
+        boolean changed = demoEngine.onSensor(event);
+        if (changed) updateWalking(demoEngine.steps(), demoEngine.status());
     }
 
     @Override

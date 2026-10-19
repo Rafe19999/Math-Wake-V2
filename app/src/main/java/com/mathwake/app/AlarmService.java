@@ -17,6 +17,8 @@ public class AlarmService extends Service implements SensorEventListener {
 
     private MediaPlayer player;
     private SensorManager sensorManager;
+    private Sensor accelerometerSensor;
+    private WalkingEngine walkingEngine = new WalkingEngine();
     private Sensor stepCounterSensor;
     private Sensor stepDetectorSensor;
     private PowerManager.WakeLock wakeLock;
@@ -96,6 +98,7 @@ public class AlarmService extends Service implements SensorEventListener {
 
             sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
             if (sensorManager != null) {
+                accelerometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
                 stepCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
                 stepDetectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
                 registerSensors();
@@ -105,6 +108,10 @@ public class AlarmService extends Service implements SensorEventListener {
 
     private void registerSensors() {
         try {
+            if (accelerometerSensor != null) {
+                sensorManager.registerListener(this, accelerometerSensor, SensorManager.SENSOR_DELAY_GAME, 0);
+                lastSource = "Adaptive motion calibration ready";
+            }
             if (stepCounterSensor != null) {
                 sensorManager.registerListener(this, stepCounterSensor, SensorManager.SENSOR_DELAY_UI, 0);
                 lastSource = "step counter ready";
@@ -113,7 +120,7 @@ public class AlarmService extends Service implements SensorEventListener {
                 sensorManager.registerListener(this, stepDetectorSensor, SensorManager.SENSOR_DELAY_FASTEST, 0);
                 lastSource = stepCounterSensor != null ? "detector + counter ready" : "step detector ready";
             }
-            if (stepCounterSensor == null && stepDetectorSensor == null) {
+            if (stepCounterSensor == null && stepDetectorSensor == null && accelerometerSensor == null) {
                 lastSource = "no step sensor available";
             }
             saveProgressAndBroadcast();
@@ -127,50 +134,13 @@ public class AlarmService extends Service implements SensorEventListener {
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (!walking) return;
-
-        int type = event.sensor.getType();
-        if (type == Sensor.TYPE_STEP_DETECTOR) {
-            long now = SystemClock.elapsedRealtime();
-            if (lastAcceptedDetectorStepAt == 0L) {
-                detectorSteps++;
-                lastAcceptedDetectorStepAt = now;
-                lastSource = "live step detector";
-            } else {
-                long delta = now - lastAcceptedDetectorStepAt;
-                if (delta >= STEP_MIN_INTERVAL_MS) {
-                    // if delta is very large it is still a valid resumed walk step
-                    detectorSteps++;
-                    lastAcceptedDetectorStepAt = now;
-                    lastSource = delta > STEP_MAX_INTERVAL_MS ? "detector resumed after pause" : "live step detector";
-                } else {
-                    // suspiciously fast event, likely shake/noise; ignore it
-                    lastSource = "ignored noisy motion";
-                }
-            }
-            reconcileAndMaybeStop();
-        } else if (type == Sensor.TYPE_STEP_COUNTER) {
-            float total = event.values[0];
-            if (Float.isNaN(counterBaseline)) {
-                counterBaseline = total;
-                lastSource = "counter baseline locked";
-            } else if (total < counterBaseline) {
-                counterBaseline = total;
-                lastSource = "counter baseline reset";
-            } else {
-                counterSteps = Math.max(counterSteps, (int) (total - counterBaseline));
-                lastSource = "counter catch-up";
-            }
-            reconcileAndMaybeStop();
-        }
-    }
-
-    private void reconcileAndMaybeStop() {
-        int verified = Math.max(detectorSteps, counterSteps);
-        if (verified != displayedSteps || !"ignored noisy motion".equals(lastSource)) {
-            displayedSteps = verified;
+        boolean changed = walkingEngine.onSensor(event);
+        lastSource = walkingEngine.status();
+        if (changed) {
+            displayedSteps = walkingEngine.steps();
             saveProgressAndBroadcast();
+            if (displayedSteps >= 40) stopSelf();
         }
-        if (displayedSteps >= 40) stopSelf();
     }
 
     private void saveProgressAndBroadcast() {

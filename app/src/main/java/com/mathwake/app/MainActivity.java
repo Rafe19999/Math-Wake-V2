@@ -175,7 +175,7 @@ public class MainActivity extends Activity {
                 "Step sensor found on this phone." :
                 "No step sensor found, so walking mode will not be reliable.";
         String modeLine = "walk".equals(selectedMode)
-                ? "Walking mode uses step detector for live updates and step counter for delayed catch-up."
+                ? "Indoor walking mode uses adaptive motion rhythm detection, with hardware sensor cross-checks."
                 : "Math mode stops the alarm after 3 correct answers.";
         info.setText(sensorLine + "\n" + modeLine);
     }

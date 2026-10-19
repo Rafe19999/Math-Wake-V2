@@ -14,3 +14,6 @@ MathWake is an Android alarm app that can be dismissed by either:
 
 ## Cloud build
 Upload the full project, including the `.github` folder, to a GitHub repository and use the Actions tab to run the APK build workflow.
+
+## V1.5 countdown
+Walking Challenge now displays remaining steps (40 → 0) in large type. Sensor logic is unchanged from V1.4.
