@@ -27,8 +27,7 @@ public class ChallengeActivity extends Activity implements SensorEventListener {
     private TextView progress, question, feedback, badge, subStatus;
     private EditText input;
     private SensorManager sensorManager;
-    private Sensor demoCounterSensor, demoDetectorSensor, demoAccelerometer;
-    private WalkingEngine demoEngine = new WalkingEngine();
+    private Sensor demoCounterSensor, demoDetectorSensor;
     private BroadcastReceiver progressReceiver;
 
     @Override
@@ -73,7 +72,6 @@ public class ChallengeActivity extends Activity implements SensorEventListener {
             if (demo) {
                 sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
                 if (sensorManager != null) {
-                    demoAccelerometer = sensorManager.getDefaultSensor(Sensor.TYPE_ACCELEROMETER);
                     demoCounterSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
                     demoDetectorSensor = sensorManager.getDefaultSensor(Sensor.TYPE_STEP_DETECTOR);
                 }
@@ -249,7 +247,6 @@ public class ChallengeActivity extends Activity implements SensorEventListener {
         if (demo) {
             if (sensorManager != null) {
                 try {
-                    if (demoAccelerometer != null) sensorManager.registerListener(this, demoAccelerometer, SensorManager.SENSOR_DELAY_GAME, 0);
                     if (demoCounterSensor != null) sensorManager.registerListener(this, demoCounterSensor, SensorManager.SENSOR_DELAY_UI, 0);
                     if (demoDetectorSensor != null) sensorManager.registerListener(this, demoDetectorSensor, SensorManager.SENSOR_DELAY_FASTEST, 0);
                 } catch (SecurityException e) {
@@ -284,8 +281,19 @@ public class ChallengeActivity extends Activity implements SensorEventListener {
     @Override
     public void onSensorChanged(SensorEvent event) {
         if (!demo || !walking) return;
-        boolean changed = demoEngine.onSensor(event);
-        if (changed) updateWalking(demoEngine.steps(), demoEngine.status());
+        int type = event.sensor.getType();
+        if (type == Sensor.TYPE_STEP_DETECTOR) {
+            demoDetectorSteps++;
+        } else if (type == Sensor.TYPE_STEP_COUNTER) {
+            float total = event.values[0];
+            if (Float.isNaN(demoCounterBaseline) || total < demoCounterBaseline) {
+                demoCounterBaseline = total;
+            } else {
+                demoCounterSteps = Math.max(demoCounterSteps, (int)(total - demoCounterBaseline));
+            }
+        }
+        demoDisplayedSteps = demoCounterSensor != null ? demoCounterSteps : demoDetectorSteps;
+        updateWalking(demoDisplayedSteps, "Classic hardware sensor");
     }
 
     @Override
